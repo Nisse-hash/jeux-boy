@@ -251,16 +251,16 @@ function updateButtons() {
     const restartBtn = document.getElementById('btn-restart');
 
     if (state.gameOver) {
-        rollBtn.style.display = 'none'; endBtn.style.display = 'none'; restartBtn.style.display = 'flex';
+        rollBtn.style.display = 'none'; endBtn.style.display = 'none'; restartBtn.style.display = 'inline-flex';
         return;
     }
     restartBtn.style.display = 'none';
 
     if (state.phase === 'hero') {
         if (state.diceResults.length === 0) {
-            rollBtn.style.display = 'flex'; endBtn.style.display = 'none';
+            rollBtn.style.display = 'inline-flex'; endBtn.style.display = 'none';
         } else {
-            rollBtn.style.display = 'none'; endBtn.style.display = 'flex';
+            rollBtn.style.display = 'none'; endBtn.style.display = 'inline-flex';
         }
     } else {
         rollBtn.style.display = 'none'; endBtn.style.display = 'none';

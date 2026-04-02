@@ -4,85 +4,82 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jeux Boy - Les Egouts Sombres</title>
-    <link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Cinzel:wght@400;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;700;900&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- VIGNETTE OVERLAY -->
+    <div id="vignette"></div>
+
     <div id="game">
         <!-- TOP BAR -->
         <header id="top-bar">
-            <div class="turn-badge" id="turn-badge">Tour 1</div>
-            <h1 class="encounter-name">Les Egouts Sombres</h1>
-            <div class="phase-badge" id="phase-badge">Phase Héros</div>
+            <div class="top-left">
+                <div class="badge turn-badge" id="turn-badge">Tour 1</div>
+            </div>
+            <div class="top-center">
+                <div class="encounter-icon">⚔</div>
+                <h1 class="encounter-name">Les Égouts Sombres</h1>
+                <p class="encounter-sub" id="flavor-text">L'odeur de pourriture vous saisit... des yeux rouges brillent dans l'obscurité.</p>
+            </div>
+            <div class="top-right">
+                <div class="badge phase-badge" id="phase-badge">Phase Héros</div>
+            </div>
         </header>
 
         <!-- MAIN LAYOUT -->
         <div id="main-layout">
             <!-- TACTICAL MAP -->
-            <div id="map-container">
+            <div id="map-wrap">
                 <div id="tactical-map">
-                    <!-- Decorations (placed by JS) -->
                     <div id="map-decor"></div>
 
-                    <!-- Zone rows -->
                     <div class="zone-row zone-distance" data-zone="distance">
-                        <span class="zone-tag">Distance</span>
+                        <div class="zone-label-wrap"><span class="zone-tag">Distance</span><span class="zone-range">3</span></div>
                         <div class="zone-slots" id="slots-distance"></div>
                     </div>
                     <div class="zone-row zone-mixte" data-zone="mixte">
-                        <span class="zone-tag">Mixte</span>
+                        <div class="zone-label-wrap"><span class="zone-tag">Mixte</span><span class="zone-range">2</span></div>
                         <div class="zone-slots" id="slots-mixte"></div>
                     </div>
-                    <div class="zone-divider"><span class="divider-label">Ligne de Front</span></div>
+                    <div class="zone-sep"><div class="sep-line"></div><span class="sep-text">Ligne de Front</span><div class="sep-line"></div></div>
                     <div class="zone-row zone-melee" data-zone="melee">
-                        <span class="zone-tag">Mélée</span>
+                        <div class="zone-label-wrap"><span class="zone-tag">Mélée</span><span class="zone-range">1</span></div>
                         <div class="zone-slots" id="slots-melee"></div>
                     </div>
-                    <div class="zone-divider hero-divider"><span class="divider-label">Vos Héros</span></div>
+                    <div class="zone-sep hero-sep"><div class="sep-line green"></div><span class="sep-text green-text">Héros</span><div class="sep-line green"></div></div>
                     <div class="zone-row zone-heroes" data-zone="heroes">
                         <div class="zone-slots" id="slots-heroes"></div>
                     </div>
 
-                    <!-- Ambient particles -->
                     <div id="particles"></div>
                 </div>
-                <p class="flavor-text" id="flavor-text">L'odeur de pourriture vous saisit. Des yeux rouges brillent dans l'obscurité...</p>
             </div>
 
             <!-- SIDEBAR -->
             <aside id="sidebar">
-                <!-- Dice Panel (always visible) -->
                 <div id="dice-panel">
-                    <div class="panel-header">
-                        <span>🎲 Dés</span>
-                        <span id="dice-phase-label" class="dice-phase-tag">Prêt</span>
+                    <div class="panel-title">
+                        <span class="panel-icon">🎲</span>
+                        <span>Dés</span>
+                        <span id="dice-phase-label" class="phase-chip">Prêt</span>
                     </div>
                     <div id="dice-tray"></div>
                     <div id="action-bar">
-                        <button id="btn-roll" class="action-btn" onclick="rollDice()">
-                            <span class="btn-icon">🎲</span> Lancer
-                        </button>
-                        <button id="btn-end-turn" class="action-btn secondary" onclick="endTurn()" style="display:none;">
-                            Fin du Tour ⏭
-                        </button>
-                        <button id="btn-restart" class="action-btn" onclick="restartGame()" style="display:none;">
-                            Recommencer ↺
-                        </button>
+                        <button id="btn-roll" class="btn-primary" onclick="rollDice()">Lancer les Dés</button>
+                        <button id="btn-end-turn" class="btn-secondary" onclick="endTurn()" style="display:none;">Fin du Tour</button>
+                        <button id="btn-restart" class="btn-primary" onclick="restartGame()" style="display:none;">Recommencer</button>
                     </div>
                 </div>
 
-                <!-- Combat Log -->
                 <div id="combat-log">
-                    <div class="log-header">Journal de Combat</div>
+                    <div class="panel-title log-title"><span class="panel-icon">📜</span><span>Journal</span></div>
                     <div id="log-entries"></div>
                 </div>
             </aside>
         </div>
     </div>
 
-    <!-- HOVER CARD (appended by JS) -->
-
-    <!-- DICE ROLL OVERLAY -->
     <div id="dice-overlay" class="hidden">
         <div id="dice-animation-container">
             <div class="dice-3d" id="dice-anim-1"></div>
@@ -90,7 +87,6 @@
         </div>
     </div>
 
-    <!-- GAME OVER OVERLAY -->
     <div id="game-over-overlay" class="hidden">
         <div id="game-over-content"></div>
     </div>
