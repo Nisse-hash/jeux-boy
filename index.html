@@ -16,13 +16,15 @@
             <div class="phase-badge" id="phase-badge">Phase Héros</div>
         </header>
 
-        <!-- MAIN LAYOUT: Map + Sidebar -->
+        <!-- MAIN LAYOUT -->
         <div id="main-layout">
-
             <!-- TACTICAL MAP -->
             <div id="map-container">
                 <div id="tactical-map">
-                    <!-- Zone labels -->
+                    <!-- Decorations (placed by JS) -->
+                    <div id="map-decor"></div>
+
+                    <!-- Zone rows -->
                     <div class="zone-row zone-distance" data-zone="distance">
                         <span class="zone-tag">Distance</span>
                         <div class="zone-slots" id="slots-distance"></div>
@@ -31,18 +33,12 @@
                         <span class="zone-tag">Mixte</span>
                         <div class="zone-slots" id="slots-mixte"></div>
                     </div>
-                    <div class="zone-divider">
-                        <span class="divider-label">Ligne de Front</span>
-                    </div>
+                    <div class="zone-divider"><span class="divider-label">Ligne de Front</span></div>
                     <div class="zone-row zone-melee" data-zone="melee">
                         <span class="zone-tag">Mélée</span>
                         <div class="zone-slots" id="slots-melee"></div>
                     </div>
-
-                    <!-- Hero zone at the bottom -->
-                    <div class="zone-divider hero-divider">
-                        <span class="divider-label">Vos Héros</span>
-                    </div>
+                    <div class="zone-divider hero-divider"><span class="divider-label">Vos Héros</span></div>
                     <div class="zone-row zone-heroes" data-zone="heroes">
                         <div class="zone-slots" id="slots-heroes"></div>
                     </div>
@@ -50,20 +46,29 @@
                     <!-- Ambient particles -->
                     <div id="particles"></div>
                 </div>
-
-                <!-- Flavor text -->
                 <p class="flavor-text" id="flavor-text">L'odeur de pourriture vous saisit. Des yeux rouges brillent dans l'obscurité...</p>
             </div>
 
-            <!-- SIDEBAR: Selected card info + log -->
+            <!-- SIDEBAR -->
             <aside id="sidebar">
-                <!-- Card Detail Panel -->
-                <div id="card-detail">
-                    <div id="detail-placeholder">
-                        <span class="placeholder-icon">👆</span>
-                        <span>Cliquez un token pour voir sa fiche</span>
+                <!-- Dice Panel (always visible) -->
+                <div id="dice-panel">
+                    <div class="panel-header">
+                        <span>🎲 Dés</span>
+                        <span id="dice-phase-label" class="dice-phase-tag">Prêt</span>
                     </div>
-                    <div id="detail-content" class="hidden"></div>
+                    <div id="dice-tray"></div>
+                    <div id="action-bar">
+                        <button id="btn-roll" class="action-btn" onclick="rollDice()">
+                            <span class="btn-icon">🎲</span> Lancer
+                        </button>
+                        <button id="btn-end-turn" class="action-btn secondary" onclick="endTurn()" style="display:none;">
+                            Fin du Tour ⏭
+                        </button>
+                        <button id="btn-restart" class="action-btn" onclick="restartGame()" style="display:none;">
+                            Recommencer ↺
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Combat Log -->
@@ -73,23 +78,9 @@
                 </div>
             </aside>
         </div>
-
-        <!-- BOTTOM: Dice Tray + Actions -->
-        <footer id="dice-bar">
-            <div id="dice-tray"></div>
-            <div id="action-bar">
-                <button id="btn-roll" class="action-btn" onclick="rollDice()">
-                    <span class="btn-icon">🎲</span> Lancer les Dés
-                </button>
-                <button id="btn-end-turn" class="action-btn secondary" onclick="endTurn()" style="display:none;">
-                    Fin du Tour ⏭
-                </button>
-                <button id="btn-restart" class="action-btn" onclick="restartGame()" style="display:none;">
-                    Recommencer ↺
-                </button>
-            </div>
-        </footer>
     </div>
+
+    <!-- HOVER CARD (appended by JS) -->
 
     <!-- DICE ROLL OVERLAY -->
     <div id="dice-overlay" class="hidden">
