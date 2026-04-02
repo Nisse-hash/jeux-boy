@@ -1,5 +1,4 @@
-// ===== GAME DATA (from Airtable) =====
-
+// ===== DATA =====
 const FACE_TYPES = {
     physique: { label: 'Physique', icon: '⚔', color: '#e08040' },
     feu: { label: 'Feu', icon: '🔥', color: '#e05040' },
@@ -13,39 +12,38 @@ const FACE_TYPES = {
     invocation: { label: 'Invoc', icon: '⊛', color: '#d09040' },
 };
 
-// Rat Géant - from Airtable: Bête, Mélée, PV 4, Armure 0, all 6 faces = Morsure 3
+const RANGE_LABELS = { 1: 'Mélée', 2: 'Mixte', 3: 'Distance' };
+
+// --- Rat Géant (from Airtable) ---
 const RAT_TEMPLATE = {
     name: 'Rat Géant',
     type: 'Bête',
-    description: 'Rongeur infâme des égouts, ses dents rongent jusqu\'à l\'os.',
-    range: 1, // Mélée
+    description: 'Rongeur infâme des égouts, ses dents rongent jusqu\'à l\'os. Ils attaquent en meute, visant les chevilles et les tendons.',
+    range: 1,
     maxHp: 4,
     armor: 0,
-    effect: '',
     emoji: '🐀',
-    dice: [
-        {
-            faces: [
-                { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
-                { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
-                { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
-                { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
-                { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
-                { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
-            ]
-        }
-    ]
+    dice: [{
+        label: 'Dé 1',
+        faces: [
+            { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
+            { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
+            { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
+            { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
+            { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
+            { name: 'Morsure', value: 3, type: 'physique', keywords: [] },
+        ]
+    }]
 };
 
-// Improvised Hero: Guerrier
+// --- Hero: Guerrier (improvised) ---
 const HERO_TEMPLATE = {
     name: 'Aldric',
     type: 'Guerrier',
-    description: 'Vétéran des guerres du Nord, sa lame ne connaît pas la pitié.',
+    description: 'Vétéran des guerres du Nord, sa lame ne connaît pas la pitié. Chaque cicatrice est une leçon apprise dans le sang.',
     range: 1,
     maxHp: 12,
     armor: 2,
-    effect: '',
     emoji: '⚔️',
     dice: [
         {
@@ -73,180 +71,207 @@ const HERO_TEMPLATE = {
     ]
 };
 
-// ===== GAME STATE =====
-let gameState = {
+// ===== STATE =====
+let state = {
     turn: 0,
-    phase: 'hero', // 'hero' or 'enemy'
+    phase: 'hero',
     enemies: [],
     heroes: [],
-    currentDiceResults: [],
-    selectedDieIndex: -1,
+    diceResults: [],
+    selectedDie: -1,
+    selectedEntity: null,
     gameOver: false,
 };
 
 // ===== INIT =====
 function initGame() {
-    gameState.turn = 1;
-    gameState.phase = 'hero';
-    gameState.gameOver = false;
-    gameState.currentDiceResults = [];
-    gameState.selectedDieIndex = -1;
+    state = {
+        turn: 1,
+        phase: 'hero',
+        enemies: [],
+        heroes: [],
+        diceResults: [],
+        selectedDie: -1,
+        selectedEntity: null,
+        gameOver: false,
+    };
 
-    // Create 5 rats
-    gameState.enemies = [];
     for (let i = 0; i < 5; i++) {
-        gameState.enemies.push({
+        state.enemies.push({
             ...JSON.parse(JSON.stringify(RAT_TEMPLATE)),
-            id: 'enemy_' + i,
+            id: 'e' + i,
             hp: RAT_TEMPLATE.maxHp,
-            currentArmor: 0,
-            stunned: false,
+            tempArmor: 0,
         });
     }
 
-    // Create hero
-    gameState.heroes = [{
+    state.heroes.push({
         ...JSON.parse(JSON.stringify(HERO_TEMPLATE)),
-        id: 'hero_0',
+        id: 'h0',
         hp: HERO_TEMPLATE.maxHp,
-        currentArmor: 0,
-        stunned: false,
-    }];
+        tempArmor: 0,
+    });
 
+    document.getElementById('game-over-overlay').classList.add('hidden');
+    document.getElementById('log-entries').innerHTML = '';
+
+    spawnParticles();
     render();
-    addLog('--- Rencontre: Les Egouts Sombres ---', 'turn');
-    addLog('5 Rats Géants surgissent de l\'obscurité !', 'info');
-    updateTurnInfo();
+    log('Rencontre : Les Egouts Sombres', 'turn');
+    log('5 Rats Géants surgissent de l\'obscurité !', 'info');
+    updateTopBar();
 }
 
-// ===== RENDERING =====
+// ===== RENDER =====
 function render() {
-    renderEnemies();
-    renderHeroes();
+    renderMap();
     renderDice();
+    renderDetail();
     updateButtons();
 }
 
-function renderEnemies() {
-    const container = document.getElementById('enemy-cards');
-    container.innerHTML = '';
-    gameState.enemies.forEach((enemy, idx) => {
-        container.appendChild(createCard(enemy, idx, false));
+function renderMap() {
+    const meleeSlots = document.getElementById('slots-melee');
+    const mixteSlots = document.getElementById('slots-mixte');
+    const distSlots = document.getElementById('slots-distance');
+    const heroSlots = document.getElementById('slots-heroes');
+
+    meleeSlots.innerHTML = '';
+    mixteSlots.innerHTML = '';
+    distSlots.innerHTML = '';
+    heroSlots.innerHTML = '';
+
+    // Place enemies in their range zone
+    state.enemies.forEach(e => {
+        const token = createToken(e, false);
+        if (e.range === 1) meleeSlots.appendChild(token);
+        else if (e.range === 2) mixteSlots.appendChild(token);
+        else distSlots.appendChild(token);
+    });
+
+    // Place heroes
+    state.heroes.forEach(h => {
+        heroSlots.appendChild(createToken(h, true));
     });
 }
 
-function renderHeroes() {
-    const container = document.getElementById('hero-cards');
-    container.innerHTML = '';
-    gameState.heroes.forEach((hero, idx) => {
-        container.appendChild(createCard(hero, idx, true));
-    });
-}
+function createToken(entity, isHero) {
+    const t = document.createElement('div');
+    t.className = `token ${isHero ? 'hero-token' : ''} ${entity.hp <= 0 ? 'dead' : ''}`;
+    t.id = 'token-' + entity.id;
 
-function createCard(entity, idx, isHero) {
-    const card = document.createElement('div');
-    card.className = `card ${isHero ? 'hero-card' : ''} ${entity.hp <= 0 ? 'dead' : ''}`;
-    card.id = entity.id;
+    if (state.selectedEntity && state.selectedEntity.id === entity.id) {
+        t.classList.add('selected');
+    }
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'card-header';
-    header.innerHTML = `
-        <span class="card-type">${entity.type}</span>
-        <span class="card-name">${entity.name}</span>
-        <span class="card-range">${entity.range}</span>
+    const armorVal = entity.tempArmor > 0 ? entity.tempArmor : entity.armor;
+
+    t.innerHTML = `
+        <span class="token-emoji">${entity.emoji}</span>
+        <span class="token-name">${entity.name}</span>
+        <div class="token-hp-bar">
+            <div class="token-hp-fill" style="width: ${(entity.hp / entity.maxHp) * 100}%"></div>
+        </div>
+        <div class="token-armor ${armorVal > 0 ? '' : 'hidden'}">${armorVal}</div>
     `;
 
-    // Image area
-    const imageDiv = document.createElement('div');
-    imageDiv.className = 'card-image';
-    imageDiv.innerHTML = `<div class="creature-icon">${entity.emoji}</div>`;
-
-    // Description
-    const descDiv = document.createElement('div');
-    descDiv.className = 'card-description';
-    descDiv.textContent = entity.description;
-
-    // Effect
-    const effectDiv = document.createElement('div');
-    effectDiv.className = 'card-effect';
-    if (entity.effect) {
-        effectDiv.textContent = '- ' + entity.effect;
+    if (entity.hp > 0) {
+        t.onclick = (ev) => {
+            ev.stopPropagation();
+            onTokenClick(entity);
+        };
     }
 
-    // Stats area
-    const statsDiv = document.createElement('div');
-    statsDiv.className = 'card-stats';
+    return t;
+}
 
-    // PV hearts
-    const pvDiv = document.createElement('div');
-    pvDiv.className = 'card-pv';
-    for (let i = 0; i < entity.maxHp; i++) {
-        const heart = document.createElement('div');
-        heart.className = `heart ${i < entity.hp ? '' : 'empty'}`;
-        pvDiv.appendChild(heart);
+function renderDetail() {
+    const placeholder = document.getElementById('detail-placeholder');
+    const content = document.getElementById('detail-content');
+
+    if (!state.selectedEntity) {
+        placeholder.classList.remove('hidden');
+        content.classList.add('hidden');
+        return;
     }
 
-    // Armor badge
-    const armorDiv = document.createElement('div');
-    armorDiv.className = 'armor-badge';
-    armorDiv.textContent = entity.currentArmor > 0 ? entity.currentArmor : entity.armor;
+    placeholder.classList.add('hidden');
+    content.classList.remove('hidden');
 
-    // Dice faces
-    const diceDiv = document.createElement('div');
-    diceDiv.className = 'card-dice';
+    const e = state.selectedEntity;
+    const rangeLabel = RANGE_LABELS[e.range] || e.range;
+    const armorDisplay = e.tempArmor > 0 ? `${e.armor} (+${e.tempArmor})` : e.armor;
 
-    entity.dice.forEach(die => {
-        const row = document.createElement('div');
-        row.className = 'dice-row';
-        die.faces.forEach(face => {
-            const faceIcon = document.createElement('div');
-            faceIcon.className = `dice-face-icon type-${face.type}`;
-            faceIcon.textContent = face.value;
-            faceIcon.title = `${face.name} ${face.value} (${face.type})`;
-            row.appendChild(faceIcon);
+    let heartsHTML = '';
+    for (let i = 0; i < e.maxHp; i++) {
+        heartsHTML += `<span class="detail-heart ${i < e.hp ? '' : 'empty'}">♥</span>`;
+    }
+
+    let diceHTML = '';
+    e.dice.forEach(die => {
+        diceHTML += `<div class="detail-dice-title">${die.label}</div><div class="detail-dice-grid">`;
+        die.faces.forEach(f => {
+            const ft = FACE_TYPES[f.type] || { icon: '?', color: '#fff' };
+            const kw = f.keywords.length > 0 ? `\n[${f.keywords.join(', ')}]` : '';
+            diceHTML += `
+                <div class="detail-face type-${f.type}" title="${f.name} ${f.value} ${f.type}${kw}">
+                    <span class="face-val">${ft.icon}${f.value}</span>
+                    <span class="face-name">${f.name}</span>
+                </div>`;
         });
-        diceDiv.appendChild(row);
+        diceHTML += '</div>';
     });
 
-    statsDiv.appendChild(pvDiv);
-    statsDiv.appendChild(diceDiv);
-    statsDiv.appendChild(armorDiv);
-
-    card.appendChild(header);
-    card.appendChild(imageDiv);
-    card.appendChild(descDiv);
-    if (entity.effect) card.appendChild(effectDiv);
-    card.appendChild(statsDiv);
-
-    return card;
+    content.innerHTML = `
+        <div class="detail-header">
+            <span class="detail-emoji">${e.emoji}</span>
+            <div>
+                <div class="detail-title">${e.name}</div>
+                <div class="detail-subtitle">${e.type} · ${rangeLabel}</div>
+            </div>
+        </div>
+        <div class="detail-desc">${e.description}</div>
+        <div class="detail-hearts">${heartsHTML}</div>
+        <div class="detail-stats">
+            <div class="stat-box">
+                <div class="stat-label">PV</div>
+                <div class="stat-value hp">${e.hp} / ${e.maxHp}</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Armure</div>
+                <div class="stat-value armor">${armorDisplay}</div>
+            </div>
+        </div>
+        ${diceHTML}
+    `;
 }
 
 function renderDice() {
     const tray = document.getElementById('dice-tray');
     tray.innerHTML = '';
 
-    if (gameState.currentDiceResults.length === 0) {
-        tray.innerHTML = '<span style="color: var(--text-secondary); font-family: var(--font-body); font-style: italic;">Lancez les dés pour agir...</span>';
+    if (state.diceResults.length === 0) {
+        tray.innerHTML = '<span class="empty-msg">Lancez les dés pour agir...</span>';
         return;
     }
 
-    gameState.currentDiceResults.forEach((result, idx) => {
-        const die = document.createElement('div');
-        die.className = `die ${result.used ? 'used' : ''}`;
-        const ft = FACE_TYPES[result.face.type] || { icon: '?', color: '#fff', label: result.face.type };
+    state.diceResults.forEach((r, idx) => {
+        const d = document.createElement('div');
+        const ft = FACE_TYPES[r.face.type] || { icon: '?', color: '#fff', label: '?' };
+        d.className = `die ${r.used ? 'used' : ''} ${state.selectedDie === idx ? 'selected-die' : ''}`;
 
-        die.innerHTML = `
-            <div class="die-value" style="color: ${ft.color}">${result.face.value}</div>
-            <div class="die-label">${result.face.name}</div>
-            <div class="die-type-icon">${ft.icon} ${ft.label}</div>
+        d.innerHTML = `
+            <div class="die-label-tag">${r.label}</div>
+            <div class="die-val" style="color:${ft.color}">${r.face.value}</div>
+            <div class="die-name">${r.face.name}</div>
+            <div class="die-type">${ft.icon}</div>
         `;
 
-        if (!result.used && gameState.phase === 'hero' && !gameState.gameOver) {
-            die.onclick = () => selectDie(idx);
+        if (!r.used && state.phase === 'hero' && !state.gameOver) {
+            d.onclick = () => selectDie(idx);
         }
 
-        tray.appendChild(die);
+        tray.appendChild(d);
     });
 }
 
@@ -255,378 +280,367 @@ function updateButtons() {
     const endBtn = document.getElementById('btn-end-turn');
     const restartBtn = document.getElementById('btn-restart');
 
-    if (gameState.gameOver) {
+    if (state.gameOver) {
         rollBtn.style.display = 'none';
         endBtn.style.display = 'none';
-        restartBtn.style.display = 'inline-block';
+        restartBtn.style.display = 'flex';
         return;
     }
 
-    if (gameState.phase === 'hero') {
-        if (gameState.currentDiceResults.length === 0) {
-            rollBtn.style.display = 'inline-block';
-            rollBtn.disabled = false;
+    restartBtn.style.display = 'none';
+
+    if (state.phase === 'hero') {
+        if (state.diceResults.length === 0) {
+            rollBtn.style.display = 'flex';
             endBtn.style.display = 'none';
         } else {
             rollBtn.style.display = 'none';
-            endBtn.style.display = 'inline-block';
+            endBtn.style.display = 'flex';
         }
     } else {
         rollBtn.style.display = 'none';
         endBtn.style.display = 'none';
     }
-    restartBtn.style.display = 'none';
 }
 
-function updateTurnInfo() {
-    const info = document.getElementById('turn-info');
-    if (gameState.gameOver) {
-        info.textContent = '';
-        return;
-    }
-    if (gameState.phase === 'hero') {
-        info.textContent = `Tour ${gameState.turn} — Phase Héros`;
+function updateTopBar() {
+    document.getElementById('turn-badge').textContent = `Tour ${state.turn}`;
+    const pb = document.getElementById('phase-badge');
+    if (state.phase === 'hero') {
+        pb.textContent = 'Phase Héros';
+        pb.classList.remove('enemy-phase');
     } else {
-        info.textContent = `Tour ${gameState.turn} — Phase Ennemis`;
+        pb.textContent = 'Phase Ennemis';
+        pb.classList.add('enemy-phase');
     }
 }
 
-// ===== COMBAT LOG =====
-function addLog(text, type = '') {
-    const log = document.getElementById('log-entries');
+// ===== LOG =====
+function log(text, type = '') {
+    const el = document.getElementById('log-entries');
     const entry = document.createElement('div');
     entry.className = `log-entry ${type}`;
     entry.textContent = text;
-    log.appendChild(entry);
-    log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    el.appendChild(entry);
+    el.scrollTop = el.scrollHeight;
 }
 
-// ===== DICE ROLLING =====
-function rollDice() {
-    if (gameState.gameOver) return;
-
-    const entity = gameState.phase === 'hero' ? gameState.heroes[0] : null;
-    if (!entity) return;
-
-    // Show overlay
-    const overlay = document.getElementById('dice-overlay');
-    const anim1 = document.getElementById('dice-anim-1');
-    const anim2 = document.getElementById('dice-anim-2');
-    overlay.classList.remove('hidden');
-    anim2.style.display = entity.dice.length > 1 ? 'flex' : 'none';
-
-    // Animate random numbers
-    let animInterval = setInterval(() => {
-        anim1.textContent = Math.floor(Math.random() * 6) + 1;
-        if (entity.dice.length > 1) {
-            anim2.textContent = Math.floor(Math.random() * 6) + 1;
+// ===== TOKEN CLICK =====
+function onTokenClick(entity) {
+    // If a die is selected, try to apply it
+    if (state.selectedDie >= 0 && state.phase === 'hero') {
+        const token = document.getElementById('token-' + entity.id);
+        if (token && token.classList.contains('selectable-target')) {
+            applyDie(entity);
+            return;
         }
-    }, 80);
+    }
 
-    // Resolve after animation
+    // Otherwise, just select to view details
+    state.selectedEntity = entity;
+    render();
+}
+
+// ===== DICE =====
+function rollDice() {
+    if (state.gameOver || state.phase !== 'hero') return;
+
+    const hero = state.heroes[0];
+    const overlay = document.getElementById('dice-overlay');
+    const a1 = document.getElementById('dice-anim-1');
+    const a2 = document.getElementById('dice-anim-2');
+
+    overlay.classList.remove('hidden');
+    a2.style.display = hero.dice.length > 1 ? 'flex' : 'none';
+
+    const tick = setInterval(() => {
+        a1.textContent = Math.floor(Math.random() * 6) + 1;
+        if (hero.dice.length > 1) a2.textContent = Math.floor(Math.random() * 6) + 1;
+    }, 70);
+
     setTimeout(() => {
-        clearInterval(animInterval);
+        clearInterval(tick);
 
-        // Roll each die
-        gameState.currentDiceResults = [];
-        entity.dice.forEach((die, dieIdx) => {
-            const faceIdx = Math.floor(Math.random() * 6);
-            const face = die.faces[faceIdx];
-            gameState.currentDiceResults.push({
-                dieIndex: dieIdx,
-                faceIndex: faceIdx,
-                face: { ...face },
+        state.diceResults = hero.dice.map((die, i) => {
+            const fi = Math.floor(Math.random() * 6);
+            return {
+                dieIndex: i,
+                faceIndex: fi,
+                face: { ...die.faces[fi] },
                 used: false,
-                label: die.label || `Dé ${dieIdx + 1}`,
-            });
+                label: die.label,
+            };
         });
 
-        // Show final values
-        anim1.textContent = gameState.currentDiceResults[0].face.value;
-        if (gameState.currentDiceResults.length > 1) {
-            anim2.textContent = gameState.currentDiceResults[1].face.value;
-        }
+        a1.textContent = state.diceResults[0].face.value;
+        if (state.diceResults.length > 1) a2.textContent = state.diceResults[1].face.value;
 
-        // Log
-        gameState.currentDiceResults.forEach(r => {
-            addLog(`${r.label}: ${r.face.name} ${r.face.value} (${r.face.type})`, 'info');
+        state.diceResults.forEach(r => {
+            const ft = FACE_TYPES[r.face.type];
+            log(`${r.label}: ${r.face.name} ${r.face.value} (${ft ? ft.label : r.face.type})`, 'info');
         });
 
         setTimeout(() => {
             overlay.classList.add('hidden');
             render();
-        }, 600);
-
-    }, 1000);
+        }, 500);
+    }, 900);
 }
 
-// ===== DIE SELECTION & TARGETING =====
 function selectDie(idx) {
-    if (gameState.currentDiceResults[idx].used) return;
-    gameState.selectedDieIndex = idx;
-    const result = gameState.currentDiceResults[idx];
+    if (state.diceResults[idx].used) return;
 
-    // Highlight die
-    document.querySelectorAll('.die').forEach((d, i) => {
-        d.style.outline = i === idx ? '2px solid var(--accent-gold)' : 'none';
-    });
+    state.selectedDie = idx;
+    const face = state.diceResults[idx].face;
 
-    // Determine valid targets
-    clearTargets();
+    // Clear all target highlights
+    document.querySelectorAll('.token').forEach(t => t.classList.remove('selectable-target'));
 
-    if (result.face.type === 'defense' || result.face.type === 'soin') {
-        // Target self (hero)
-        makeSelectable(gameState.heroes, true);
+    // Highlight valid targets
+    if (face.type === 'defense' || face.type === 'soin') {
+        state.heroes.filter(h => h.hp > 0).forEach(h => {
+            const el = document.getElementById('token-' + h.id);
+            if (el) el.classList.add('selectable-target');
+        });
     } else {
-        // Target enemies
-        makeSelectable(gameState.enemies.filter(e => e.hp > 0), false);
+        state.enemies.filter(e => e.hp > 0).forEach(e => {
+            const el = document.getElementById('token-' + e.id);
+            if (el) el.classList.add('selectable-target');
+        });
     }
-}
 
-function clearTargets() {
-    document.querySelectorAll('.card').forEach(c => {
-        c.classList.remove('selectable', 'targeted');
-        c.onclick = null;
-    });
-}
-
-function makeSelectable(entities, isHero) {
-    entities.forEach(entity => {
-        const el = document.getElementById(entity.id);
-        if (!el || entity.hp <= 0) return;
-        el.classList.add('selectable');
-        el.onclick = () => applyDie(entity, isHero);
-    });
+    render();
+    // Re-apply target highlights after render
+    setTimeout(() => {
+        if (face.type === 'defense' || face.type === 'soin') {
+            state.heroes.filter(h => h.hp > 0).forEach(h => {
+                const el = document.getElementById('token-' + h.id);
+                if (el) el.classList.add('selectable-target');
+            });
+        } else {
+            state.enemies.filter(e => e.hp > 0).forEach(e => {
+                const el = document.getElementById('token-' + e.id);
+                if (el) el.classList.add('selectable-target');
+            });
+        }
+    }, 10);
 }
 
 // ===== APPLY DIE =====
-function applyDie(target, isHero) {
-    const idx = gameState.selectedDieIndex;
+function applyDie(target) {
+    const idx = state.selectedDie;
     if (idx < 0) return;
+    const r = state.diceResults[idx];
+    if (r.used) return;
 
-    const result = gameState.currentDiceResults[idx];
-    if (result.used) return;
-
-    const face = result.face;
+    const face = r.face;
+    const token = document.getElementById('token-' + target.id);
 
     if (face.type === 'defense') {
-        // Add armor
-        target.currentArmor += face.value;
-        addLog(`${target.name} gagne ${face.value} de défense !`, 'defense');
-        showPopup(target.id, `+${face.value} 🛡`, 'block');
+        target.tempArmor += face.value;
+        log(`${target.name} gagne +${face.value} défense !`, 'defense');
+        floatText(token, `+${face.value} 🛡`, 'block');
+        if (token) token.classList.add('healed');
     } else if (face.type === 'soin') {
-        // Heal
         const healed = Math.min(face.value, target.maxHp - target.hp);
         target.hp += healed;
-        addLog(`${target.name} récupère ${healed} PV !`, 'heal');
-        showPopup(target.id, `+${healed} ❤`, 'heal');
+        log(`${target.name} récupère ${healed} PV !`, 'heal');
+        floatText(token, `+${healed} ❤`, 'heal');
+        if (token) token.classList.add('healed');
     } else {
-        // Damage
-        let dmg = face.value;
-        let blocked = 0;
+        dealDamage(target, face.value, face, token);
 
-        // Apply armor
-        if (target.currentArmor > 0) {
-            blocked = Math.min(target.currentArmor, dmg);
-            target.currentArmor -= blocked;
-            dmg -= blocked;
-        }
-        if (target.armor > 0 && dmg > 0) {
-            const armorBlock = Math.min(target.armor, dmg);
-            blocked += armorBlock;
-            dmg -= armorBlock;
-        }
-
-        target.hp = Math.max(0, target.hp - dmg);
-
-        if (blocked > 0) {
-            addLog(`${face.name} ${face.value} sur ${target.name}: ${dmg} dégâts (${blocked} bloqués)`, 'damage');
-        } else {
-            addLog(`${face.name} ${face.value} sur ${target.name}: ${dmg} dégâts !`, 'damage');
-        }
-        showPopup(target.id, `-${dmg}`, 'damage');
-
-        // Check for couple keyword
-        if (face.keywords && face.keywords.includes('couple')) {
-            const enemies = gameState.enemies.filter(e => e.hp > 0);
-            const tIdx = enemies.indexOf(target);
-            if (tIdx >= 0 && tIdx < enemies.length - 1) {
-                const adjacent = enemies[tIdx + 1];
-                let adjDmg = face.value;
-                if (adjacent.armor > 0) adjDmg = Math.max(0, adjDmg - adjacent.armor);
-                adjacent.hp = Math.max(0, adjacent.hp - adjDmg);
-                addLog(`Couple! ${adjacent.name} subit aussi ${adjDmg} dégâts !`, 'damage');
-                showPopup(adjacent.id, `-${adjDmg}`, 'damage');
-                if (adjacent.hp <= 0) {
-                    addLog(`${adjacent.name} est vaincu !`, 'death');
-                }
+        // Couple keyword
+        if (face.keywords.includes('couple')) {
+            const alive = state.enemies.filter(e => e.hp > 0);
+            const tIdx = alive.indexOf(target);
+            if (tIdx >= 0 && tIdx < alive.length - 1) {
+                const adj = alive[tIdx + 1];
+                const adjToken = document.getElementById('token-' + adj.id);
+                dealDamage(adj, face.value, face, adjToken);
+                log(`Couple ! ${adj.name} subit aussi les dégâts !`, 'damage');
             }
-        }
-
-        // Check death
-        if (target.hp <= 0) {
-            addLog(`${target.name} est vaincu !`, 'death');
         }
     }
 
-    // Mark die as used
-    result.used = true;
-    gameState.selectedDieIndex = -1;
-    clearTargets();
+    r.used = true;
+    state.selectedDie = -1;
+    document.querySelectorAll('.token').forEach(t => t.classList.remove('selectable-target'));
+
+    // Select the target for detail view
+    state.selectedEntity = target;
     render();
 
-    // Check win/loss
-    checkGameEnd();
+    // Remove animation classes
+    setTimeout(() => {
+        document.querySelectorAll('.token.hit, .token.healed').forEach(t => {
+            t.classList.remove('hit', 'healed');
+        });
+    }, 500);
+
+    checkEnd();
+}
+
+function dealDamage(target, rawDmg, face, tokenEl) {
+    let dmg = rawDmg;
+    let blocked = 0;
+
+    if (target.tempArmor > 0) {
+        const b = Math.min(target.tempArmor, dmg);
+        target.tempArmor -= b;
+        blocked += b;
+        dmg -= b;
+    }
+    if (target.armor > 0 && dmg > 0) {
+        const b = Math.min(target.armor, dmg);
+        blocked += b;
+        dmg -= b;
+    }
+
+    target.hp = Math.max(0, target.hp - dmg);
+
+    const logMsg = blocked > 0
+        ? `${face.name} ${rawDmg} → ${target.name}: ${dmg} dégâts (${blocked} bloqués)`
+        : `${face.name} ${rawDmg} → ${target.name}: ${dmg} dégâts !`;
+    log(logMsg, 'damage');
+
+    floatText(tokenEl, dmg > 0 ? `-${dmg}` : 'Bloqué', dmg > 0 ? 'damage' : 'block');
+
+    if (tokenEl) {
+        tokenEl.classList.add('hit');
+        if (dmg > 0) screenShake();
+    }
+
+    if (target.hp <= 0) {
+        log(`☠ ${target.name} est vaincu !`, 'death');
+    }
 }
 
 // ===== ENEMY TURN =====
 function enemyTurn() {
-    gameState.phase = 'enemy';
-    updateTurnInfo();
+    state.phase = 'enemy';
+    updateTopBar();
     render();
 
-    const aliveEnemies = gameState.enemies.filter(e => e.hp > 0);
-    const hero = gameState.heroes[0];
+    const alive = state.enemies.filter(e => e.hp > 0);
+    const hero = state.heroes[0];
+    if (alive.length === 0 || hero.hp <= 0) { checkEnd(); return; }
 
-    if (aliveEnemies.length === 0 || hero.hp <= 0) {
-        checkGameEnd();
-        return;
-    }
+    log(`Tour ${state.turn} : Phase Ennemis`, 'turn');
 
-    addLog(`--- Tour ${gameState.turn} : Phase Ennemis ---`, 'turn');
-
-    let delay = 500;
-    aliveEnemies.forEach((enemy, i) => {
+    alive.forEach((enemy, i) => {
         setTimeout(() => {
-            if (hero.hp <= 0 || gameState.gameOver) return;
+            if (hero.hp <= 0 || state.gameOver) return;
 
-            // Roll die for enemy
             const die = enemy.dice[0];
-            const faceIdx = Math.floor(Math.random() * 6);
-            const face = die.faces[faceIdx];
+            const face = die.faces[Math.floor(Math.random() * 6)];
+            const enemyToken = document.getElementById('token-' + enemy.id);
+            const heroToken = document.getElementById('token-' + hero.id);
 
-            // Highlight enemy
-            const el = document.getElementById(enemy.id);
-            if (el) el.classList.add('targeted');
-
-            addLog(`${enemy.name} lance: ${face.name} ${face.value}`, 'info');
-
-            // Apply damage to hero
-            let dmg = face.value;
-            let blocked = 0;
-
-            if (hero.currentArmor > 0) {
-                blocked = Math.min(hero.currentArmor, dmg);
-                hero.currentArmor -= blocked;
-                dmg -= blocked;
-            }
-            if (hero.armor > 0 && dmg > 0) {
-                const armorBlock = Math.min(hero.armor, dmg);
-                blocked += armorBlock;
-                dmg -= armorBlock;
+            // Flash enemy
+            if (enemyToken) {
+                enemyToken.classList.add('selected');
+                state.selectedEntity = enemy;
+                renderDetail();
             }
 
-            hero.hp = Math.max(0, hero.hp - dmg);
+            log(`${enemy.name} attaque : ${face.name} ${face.value}`, 'info');
+            dealDamage(hero, face.value, face, heroToken);
+            render();
 
-            if (blocked > 0) {
-                addLog(`${enemy.name} inflige ${dmg} dégâts à ${hero.name} (${blocked} bloqués)`, 'damage');
-            } else {
-                addLog(`${enemy.name} inflige ${dmg} dégâts à ${hero.name} !`, 'damage');
-            }
-            showPopup('hero_0', `-${dmg}`, 'damage');
-
-            // Remove highlight
             setTimeout(() => {
-                if (el) el.classList.remove('targeted');
-                render();
-            }, 400);
+                if (enemyToken) enemyToken.classList.remove('selected');
+                document.querySelectorAll('.token.hit').forEach(t => t.classList.remove('hit'));
 
-            // After last enemy
-            if (i === aliveEnemies.length - 1) {
-                setTimeout(() => {
-                    if (hero.hp <= 0) {
-                        checkGameEnd();
-                        return;
-                    }
-                    // Next hero turn
-                    gameState.turn++;
-                    gameState.phase = 'hero';
-                    gameState.currentDiceResults = [];
-                    gameState.selectedDieIndex = -1;
-                    // Reset temporary armor
-                    hero.currentArmor = 0;
-                    addLog(`--- Tour ${gameState.turn} : Phase Héros ---`, 'turn');
-                    updateTurnInfo();
-                    render();
-                }, 600);
-            }
-        }, delay * (i + 1));
+                // Last enemy done?
+                if (i === alive.length - 1) {
+                    setTimeout(() => {
+                        if (hero.hp <= 0) { checkEnd(); return; }
+                        state.turn++;
+                        state.phase = 'hero';
+                        state.diceResults = [];
+                        state.selectedDie = -1;
+                        hero.tempArmor = 0;
+                        state.selectedEntity = hero;
+                        log(`Tour ${state.turn} : Phase Héros`, 'turn');
+                        updateTopBar();
+                        render();
+                    }, 400);
+                }
+            }, 350);
+        }, 600 * (i + 1));
     });
 }
 
 function endTurn() {
-    // Check if all dice used - otherwise confirm
-    const unused = gameState.currentDiceResults.filter(d => !d.used);
-    if (unused.length > 0) {
-        // Allow ending with unused dice
-        addLog(`${unused.length} dé(s) non utilisé(s).`, 'info');
-    }
-
-    clearTargets();
+    const unused = state.diceResults.filter(d => !d.used);
+    if (unused.length > 0) log(`${unused.length} dé(s) non utilisé(s).`, 'info');
+    document.querySelectorAll('.token').forEach(t => t.classList.remove('selectable-target'));
     enemyTurn();
 }
 
 // ===== GAME END =====
-function checkGameEnd() {
-    const hero = gameState.heroes[0];
-    const aliveEnemies = gameState.enemies.filter(e => e.hp > 0);
+function checkEnd() {
+    const hero = state.heroes[0];
+    const alive = state.enemies.filter(e => e.hp > 0);
 
-    if (aliveEnemies.length === 0 && hero.hp > 0) {
-        gameState.gameOver = true;
-        addLog('VICTOIRE ! Tous les rats sont vaincus !', 'info');
-        showBanner('victory', 'Victoire !', `${hero.name} survit avec ${hero.hp} PV.`);
-        render();
+    if (alive.length === 0 && hero.hp > 0) {
+        state.gameOver = true;
+        log('VICTOIRE ! Tous les rats sont vaincus !', 'info');
+        showGameOver('victory', 'Victoire !', `${hero.name} survit avec ${hero.hp} PV.`);
     } else if (hero.hp <= 0) {
-        gameState.gameOver = true;
-        addLog('DEFAITE... Le héros est tombé.', 'death');
-        showBanner('defeat', 'Défaite...', `${hero.name} a succombé aux rats.`);
-        render();
+        state.gameOver = true;
+        log('DEFAITE... Le héros est tombé.', 'death');
+        showGameOver('defeat', 'Défaite...', `${hero.name} a succombé aux rats.`);
     }
+    render();
 }
 
-function showBanner(type, title, subtitle) {
-    const existing = document.querySelector('.game-banner');
-    if (existing) existing.remove();
-
-    const banner = document.createElement('div');
-    banner.className = `game-banner ${type}`;
-    banner.innerHTML = `<h2>${title}</h2><p>${subtitle}</p>`;
-    document.body.appendChild(banner);
+function showGameOver(type, title, sub) {
+    const overlay = document.getElementById('game-over-overlay');
+    const content = document.getElementById('game-over-content');
+    overlay.classList.remove('hidden');
+    content.className = type;
+    content.innerHTML = `<h2>${title}</h2><p>${sub}</p>`;
 }
 
 function restartGame() {
-    const banner = document.querySelector('.game-banner');
-    if (banner) banner.remove();
-    document.getElementById('log-entries').innerHTML = '';
     initGame();
 }
 
-// ===== POPUP =====
-function showPopup(entityId, text, type) {
-    const el = document.getElementById(entityId);
-    if (!el) return;
+// ===== FX =====
+function floatText(tokenEl, text, type) {
+    if (!tokenEl) return;
+    const f = document.createElement('div');
+    f.className = `dmg-float ${type}`;
+    f.textContent = text;
+    f.style.left = '50%';
+    f.style.top = '0';
+    f.style.transform = 'translateX(-50%)';
+    tokenEl.style.position = 'relative';
+    tokenEl.appendChild(f);
+    setTimeout(() => f.remove(), 1200);
+}
 
-    const popup = document.createElement('div');
-    popup.className = `damage-popup ${type}`;
-    popup.textContent = text;
-    popup.style.position = 'absolute';
-    popup.style.left = '50%';
-    popup.style.top = '30%';
-    popup.style.transform = 'translateX(-50%)';
-    el.style.position = 'relative';
-    el.appendChild(popup);
+function screenShake() {
+    const map = document.getElementById('tactical-map');
+    map.classList.add('screen-shake');
+    setTimeout(() => map.classList.remove('screen-shake'), 300);
+}
 
-    setTimeout(() => popup.remove(), 1000);
+function spawnParticles() {
+    const container = document.getElementById('particles');
+    container.innerHTML = '';
+    for (let i = 0; i < 15; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.left = Math.random() * 100 + '%';
+        p.style.animationDuration = (4 + Math.random() * 6) + 's';
+        p.style.animationDelay = Math.random() * 5 + 's';
+        p.style.width = (1 + Math.random() * 2) + 'px';
+        p.style.height = p.style.width;
+        container.appendChild(p);
+    }
 }
 
 // ===== START =====
