@@ -182,6 +182,11 @@ function createToken(entity, isHero) {
         };
     }
 
+    // Hover card tooltip
+    t.addEventListener('mouseenter', (ev) => showHoverCard(entity, ev));
+    t.addEventListener('mousemove', (ev) => moveHoverCard(ev));
+    t.addEventListener('mouseleave', hideHoverCard);
+
     return t;
 }
 
@@ -641,6 +646,84 @@ function spawnParticles() {
         p.style.height = p.style.width;
         container.appendChild(p);
     }
+}
+
+// ===== HOVER CARD =====
+let hoverCardEl = null;
+
+function buildCardHTML(e) {
+    const rangeLabel = RANGE_LABELS[e.range] || e.range;
+    const armorDisplay = e.tempArmor > 0 ? `${e.armor}+${e.tempArmor}` : e.armor;
+
+    let heartsHTML = '';
+    for (let i = 0; i < e.maxHp; i++) {
+        heartsHTML += `<span class="hc-heart ${i < e.hp ? '' : 'empty'}">♥</span>`;
+    }
+
+    let diceHTML = '';
+    e.dice.forEach(die => {
+        diceHTML += `<div class="hc-dice-label">${die.label}</div><div class="hc-dice-grid">`;
+        die.faces.forEach(f => {
+            const ft = FACE_TYPES[f.type] || { icon: '?', color: '#fff' };
+            diceHTML += `<div class="hc-face type-${f.type}"><span class="hc-face-val">${ft.icon}${f.value}</span><span class="hc-face-name">${f.name}</span></div>`;
+        });
+        diceHTML += '</div>';
+    });
+
+    return `
+        <div class="hc-header">
+            <span class="hc-emoji">${e.emoji}</span>
+            <div>
+                <div class="hc-title">${e.name}</div>
+                <div class="hc-subtitle">${e.type} · ${rangeLabel}</div>
+            </div>
+        </div>
+        <div class="hc-desc">${e.description}</div>
+        <div class="hc-hearts">${heartsHTML}</div>
+        <div class="hc-stats">
+            <div class="hc-stat"><span class="hc-stat-label">PV</span><span class="hc-stat-val hp">${e.hp}/${e.maxHp}</span></div>
+            <div class="hc-stat"><span class="hc-stat-label">Armure</span><span class="hc-stat-val armor">${armorDisplay}</span></div>
+        </div>
+        ${diceHTML}
+    `;
+}
+
+function showHoverCard(entity, ev) {
+    if (!hoverCardEl) {
+        hoverCardEl = document.createElement('div');
+        hoverCardEl.id = 'hover-card';
+        document.body.appendChild(hoverCardEl);
+    }
+    hoverCardEl.innerHTML = buildCardHTML(entity);
+    hoverCardEl.classList.add('visible');
+    positionHoverCard(ev);
+}
+
+function moveHoverCard(ev) {
+    if (hoverCardEl && hoverCardEl.classList.contains('visible')) {
+        positionHoverCard(ev);
+    }
+}
+
+function positionHoverCard(ev) {
+    if (!hoverCardEl) return;
+    const pad = 16;
+    const cardW = 240;
+    const cardH = hoverCardEl.offsetHeight || 300;
+    let x = ev.clientX + pad;
+    let y = ev.clientY + pad;
+
+    // Keep on screen
+    if (x + cardW > window.innerWidth) x = ev.clientX - cardW - pad;
+    if (y + cardH > window.innerHeight) y = window.innerHeight - cardH - pad;
+    if (y < 8) y = 8;
+
+    hoverCardEl.style.left = x + 'px';
+    hoverCardEl.style.top = y + 'px';
+}
+
+function hideHoverCard() {
+    if (hoverCardEl) hoverCardEl.classList.remove('visible');
 }
 
 // ===== START =====
